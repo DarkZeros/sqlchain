@@ -1,0 +1,6 @@
+[submodule "postgres"]
+	path = postgres
+	url = https://github.com/postgres/postgres.git
+[submodule "pg_ecdsa_verify"]
+	path = pg_ecdsa_verify
+	url = https://github.com/joelonsql/pg_ecdsa_verify

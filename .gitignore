@@ -1,0 +1,22 @@
+# SQLChain build artifacts and data
+postgres_build/
+postgres_data/
+*.pyc
+__pycache__/
+*.log
+
+# Python virtual environment
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
