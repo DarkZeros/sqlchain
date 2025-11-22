@@ -10,33 +10,59 @@ CREATE EXTENSION pg_ecdsa_verify;
 CREATE OR REPLACE FUNCTION submit_transaction(
     p_acc_id BIGINT,
     p_sql_code TEXT,
-    p_signature BYTEA,
-    p_nonce BIGINT
+    p_nonce BIGINT,
+    p_signature BYTEA
 ) RETURNS INTEGER AS $$
 DECLARE
-    v_id
-    v_txid INTEGER;
+    v_acc_pub   BYTEA;    -- public keys should be bytea
+    v_acc_nonce BIGINT;
+    v_txid      INTEGER;
+    v_input_data BYTEA;
 BEGIN
-    -- Account needs to exist
-    SELECT id, nonce INTO v_account_id FROM ledger WHERE pub = p_pub;
-    
-    IF v_account_id IS NULL THEN
-        -- New account needs initial credits (from genesis or must receive funds first)
-        RAISE EXCEPTION 'Account does not exist. Must create/receive funds first.';
+    -- Account must exist: this SELECT INTO will fail automatically if not found
+    SELECT pub, nonce
+    INTO v_acc_pub, v_acc_nonce
+    FROM ledger
+    WHERE id = p_acc_id;
+
+    -----------------------------------------------------------------------
+    -- NONCE CHECK: must be greater than stored nonce
+    -----------------------------------------------------------------------
+    IF p_nonce < v_acc_nonce + 1 THEN
+        RAISE EXCEPTION
+            'Invalid nonce: expected > %, received %',
+            v_acc_nonce, p_nonce;
     END IF;
-    
-    -- Validate signature (placeholder - implement proper crypto verification)
-    -- In production, verify signature against pub key and transaction data
-    -- For now, we accept any non-empty signature for testing
-    IF p_signature IS NULL OR LENGTH(p_signature) = 0 THEN
-        RAISE EXCEPTION 'Invalid signature';
+
+    -----------------------------------------------------------------------
+    -- SIGNATURE CHECK
+    -- You must define *exactly* what is signed.
+    -- Most chains define input_data = hash(account_id | sql_code | nonce)
+    -- But since you did not specify a hash layout, here we simply concatenate.
+    -----------------------------------------------------------------------
+    v_input_data :=
+        digest(
+            p_acc_id::text || p_sql_code || p_nonce::text,
+            'sha256'
+        )::bytea;
+
+    IF NOT ecdsa_verify.ecdsa_verify(
+        public_key := v_acc_pub,
+        input_data := v_input_data,
+        signature  := p_signature,
+        hash_func  := 'sha256',
+        curve_name := 'secp256r1'
+    ) THEN
+        RAISE EXCEPTION 'Invalid signature for account %', p_acc_id;
     END IF;
-    
-    -- Insert into pending queue
-    INSERT INTO pending_transactions (account_id, pub, sql_code, signature, nonce)
-    VALUES (p_acc_id, p_pub, p_sql_code, p_signature, p_nonce)
-    RETURNING txid INTO v_txid;
-    
+
+    -----------------------------------------------------------------------
+    -- Insert transaction into queue; return the txid
+    -----------------------------------------------------------------------
+    INSERT INTO pending_transactions (account_id, sql_code, nonce, sign)
+    VALUES (p_acc_id, p_sql_code, p_nonce, p_signature)
+    RETURNING id INTO v_txid;
+
     RETURN v_txid;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -244,7 +270,7 @@ $$ LANGUAGE plpgsql;
 -- EXECUTE PENDING TRANSACTION FUNCTION
 -- ============================================================================
 -- Execute a single pending transaction in the context of its owner
-CREATE OR REPLACE FUNCTION execute_pending_transaction(
+CREATE OR REPLACE FUNCTION execute_transaction(
     p_txid INTEGER,
     p_block_id INTEGER
 ) RETURNS BOOLEAN AS $$
