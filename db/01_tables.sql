@@ -8,7 +8,7 @@
 -- We want to encourage billions of accounts, therefore keep it simple here
 CREATE TABLE ledger (
     id BIGSERIAL UNIQUE PRIMARY KEY, -- Matches the role number, "unique"
-    pub BYTEA UNIQUE NOT NULL,  -- Public key hash
+    pub BYTEA UNIQUE NOT NULL CHECK (length(pub) <= 64),  -- Public key hash
     credits BIGINT NOT NULL DEFAULT 0 CHECK (credits >= 0),
     nonce BIGINT NOT NULL -- TX need to increase this number, only
     -- storage_bytes BIGINT NOT NULL DEFAULT 0,
@@ -25,8 +25,8 @@ CREATE INDEX idx_ledger_credits ON ledger(credits);
 -- Block history, this is PERMANENT DB storage, so it needs to be as small as possible
 CREATE TABLE blockchain (
     bid BIGSERIAL PRIMARY KEY, -- Block numbers are this
-    hash BYTEA NOT NULL, -- The hash of all the transactions in this block
-    ledger_hash BYTEA NOT NULL, -- The hash of the ledger at this point
+    hash BYTEA NOT NULL CHECK (length(hash) <= 64), -- The hash of all the transactions in this block
+    ledger_hash BYTEA NOT NULL CHECK (length(ledger_hash) <= 64), -- The hash of the ledger at this point
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- Block mint timestamp
     -- All these can be in the mineTX not here
     -- miner_id INTEGER REFERENCES ledger(id),
@@ -44,10 +44,11 @@ CREATE INDEX idx_blockchain_hash ON blockchain(hash);
 -- Queue of unprocessed transactions. Malicious users can submit bad TX
 CREATE TABLE pending_transactions (
     account_id BIGINT NOT NULL,  -- Which account submitted this
-    signature BYTEA NOT NULL, -- Signature matching the public code of the account
     -- Signature signs the following data
-        sql_code TEXT NOT NULL,
-        nonce BIGINT NOT NULL
+    sql_code TEXT NOT NULL, --  CHECK (length(sql_code) <= 100000)
+    nonce BIGINT NOT NULL,
+    -- Signature matching the public code of the account
+    sign BYTEA NOT NULL CHECK (length(sign) <= 64)
     -- Needed? KISS
     -- submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- estimated_cost NUMERIC(20,8) NOT NULL DEFAULT 0,
