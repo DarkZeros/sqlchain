@@ -23,20 +23,21 @@ CREATE INDEX idx_ledger_credits ON ledger(credits);
 -- BLOCKCHAIN TABLE
 -- ============================================================================
 -- Block history, this is PERMANENT DB storage, so it needs to be as small as possible
+-- It needs to hash the whole ledger state at BlockN, and also the block hash
+-- PoW can be checked by doing ledger_hash_N-1 + block_hash_N -> how many 0s
 CREATE TABLE blockchain (
-    bid BIGSERIAL PRIMARY KEY, -- Block numbers are this
-    hash BYTEA NOT NULL CHECK (length(hash) <= 64), -- The hash of all the transactions in this block
-    ledger_hash BYTEA NOT NULL CHECK (length(ledger_hash) <= 64), -- The hash of the ledger at this point
-    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- Block mint timestamp
+    bid BIGSERIAL UNIQUE PRIMARY KEY, -- Block numbers are this
+    block_hash BYTEA NOT NULL CHECK (length(block_hash) <= 32), -- The hash of all the transactions in this block
+    ledger_hash BYTEA NOT NULL CHECK (length(ledger_hash) <= 32) -- The hash of the ledger before the block was applied
     -- All these can be in the mineTX not here
+    -- timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- Block mint timestamp
     -- miner_id INTEGER REFERENCES ledger(id),
     -- transaction_count INTEGER NOT NULL DEFAULT 0,
     -- reward_amount NUMERIC(20,8) NOT NULL,
     -- server_fee NUMERIC(20,8) NOT NULL DEFAULT 0
 );
 
-CREATE INDEX idx_blockchain_hash ON blockchain(hash);
--- CREATE INDEX idx_blockchain_miner ON blockchain(miner_id);
+CREATE INDEX idx_blockchain_hash ON blockchain(block_hash);
 
 -- ============================================================================
 -- PENDING TRANSACTIONS TABLE
@@ -60,14 +61,13 @@ CREATE TABLE pending_transactions (
 -- ============================================================================
 -- Template structure for block transaction tables
 -- Each block gets its own table named: block_transactions_<bid>
--- CREATE TABLE block_transactions_template (
---     txid SERIAL PRIMARY KEY,
---     account_id INTEGER NOT NULL,
---     pub VARCHAR(64) NOT NULL,
---     sql_code TEXT NOT NULL,
---     signature VARCHAR(256) NOT NULL,
---     execution_cost NUMERIC(20,8) NOT NULL,
---     executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
---     success BOOLEAN NOT NULL DEFAULT TRUE,
---     error_message TEXT
--- );
+CREATE TABLE block_transactions_template (
+    txid SERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL,
+    sql_code TEXT NOT NULL,
+    nonce BIGINT NOT NULL,
+    sign BYTEA NOT NULL CHECK (length(sign) <= 64),
+    --   Needed?
+    execution_cost NUMERIC(20,8) NOT NULL,
+    executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

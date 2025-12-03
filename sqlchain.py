@@ -228,10 +228,8 @@ class SQLChainManager:
         self.run_command([
             str(pg_ctl),
             "-D", str(self.data_dir),
-            "stop"
-        ])
-        
-        self.log("PostgreSQL stopped", "SUCCESS")
+            "stop",
+        ],check=False)
         return True
     
     def get_connection(self):

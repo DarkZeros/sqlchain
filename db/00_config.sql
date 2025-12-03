@@ -1,6 +1,8 @@
 -- SQLChain: Node config tables
 -- This file creates the config defaults
 
+CREATE EXTENSION pg_ecdsa_verify;
+
 -- ============================================================================
 -- SYSTEM CONFIGURATION TABLE
 -- ============================================================================
