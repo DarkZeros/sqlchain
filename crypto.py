@@ -8,8 +8,7 @@ from eth_account import Account
 Account.enable_unaudited_hdwallet_features()
 
 DEFAULT_MNEMONIC = (
-    "abandon abandon abandon abandon abandon abandon abandon "
-    "abandon abandon abandon abandon about"
+    "remember always you liberty human group will win over abuse govern virus"
 )
 
 def sha256(data: bytes) -> bytes:
@@ -68,7 +67,7 @@ def main():
         priv = key_random()
 
     else:
-        print("[+] Using DEFAULT mnemonic")
+        print(f"[+] Using DEFAULT mnemonic '{DEFAULT_MNEMONIC}'")
         priv = key_from_mnemonic(DEFAULT_MNEMONIC)
 
     # ----------------------------------------------------------------------
@@ -86,14 +85,14 @@ def main():
     # OUTPUT
     # ----------------------------------------------------------------------
     print("------------------------------------------------------------")
-    print(f"Private key   :", priv.hex())
-    # print(f"Public key (uncompressed):", public_key.to_hex())
-    print(f"Public key    :", public_key.to_compressed_bytes().hex())
+    print(f"Private key   : 0x{priv.hex()}")
+    print(f"Public key    : {public_key.to_hex()}")
+    print(f"Public key C  : 0x{public_key.to_compressed_bytes().hex()}")
     print(f"")
-    print(f"Message hex   :", msg_bytes.hex())
-    print(f"SHA-256 digest:", digest.hex())
+    print(f"Message hex   : 0x{msg_bytes.hex()}")
+    print(f"SHA-256 digest: 0x{digest.hex()}")
     print(f"")
-    print(f"Signature     :", sig_rs.hex())
+    print(f"Signature     : 0x{sig_rs.hex()}")
     print(f" r = {hex(signature.r)}")
     print(f" s = {hex(signature.s)}")
     print("------------------------------------------------------------")

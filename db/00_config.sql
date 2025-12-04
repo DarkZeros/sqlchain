@@ -27,10 +27,17 @@ CREATE TABLE system_config (
 -- Initialize with default values
 INSERT INTO system_config VALUES 
     ('block_reward', '1000000000000', CURRENT_TIMESTAMP),
-    ('block_rate', '10', CURRENT_TIMESTAMP),
-    ('cost', '0.1', CURRENT_TIMESTAMP),
+    -- ('block_rate', '10', CURRENT_TIMESTAMP), -- PRODUCTION
+    ('block_rate', '60', CURRENT_TIMESTAMP), -- TEST
 
+    -- Costs applied each block / TX
+    ('storage_cost', '0.1', CURRENT_TIMESTAMP),
+    ('operation_cost', '0.1', CURRENT_TIMESTAMP),
+
+    -- When the server generates the mint data for the block
+    -- Will include a fee percent in the TX, the miner then mines accepting that
     ('server_fee_percent', '1.0', CURRENT_TIMESTAMP),
+    ('server_pub_account', 'TODO', CURRENT_TIMESTAMP),
 
     ('difficulty', '4', CURRENT_TIMESTAMP),
     ('current_block', '0', CURRENT_TIMESTAMP);
