@@ -11,6 +11,7 @@ BEGIN
     -- Create a schema owned by that role
     EXECUTE format('CREATE SCHEMA IF NOT EXISTS schema_%s AUTHORIZATION role_%s',
                    NEW.id, NEW.id);
+    EXECUTE format('GRANT USAGE ON SCHEMA public TO role_%s', NEW.id);
 
     -- Return NEW to allow the insert to continue
     RETURN NEW;

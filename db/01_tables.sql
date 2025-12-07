@@ -10,7 +10,7 @@ CREATE TABLE ledger (
     id BIGSERIAL UNIQUE PRIMARY KEY, -- Matches the role number, "unique"
     credits BIGINT NOT NULL CHECK (credits >= 0),
     nonce BIGINT NOT NULL DEFAULT 0, -- TX need to increase this number, only
-    pub BYTEA UNIQUE NOT NULL CHECK (length(pub) = 33)  -- Public key -- TODO: Could we use 33 bytes?
+    pub BYTEA UNIQUE NOT NULL CHECK (length(pub) = 33)  -- Public key
     -- storage_bytes BIGINT NOT NULL DEFAULT 0,
     -- created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- last_activity TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -28,7 +28,7 @@ CREATE TABLE blockchain (
     bid BIGSERIAL UNIQUE PRIMARY KEY, -- Block numbers are this
     block_hash BYTEA NOT NULL CHECK (length(block_hash) = 32), -- The hash of all the transactions in this block
     ledger_hash BYTEA NOT NULL CHECK (length(ledger_hash) = 32), -- The hash of the ledger before the block was applied
-    pub BYTEA NOT NULL CHECK (length(pub) = 64), -- The public key of the miner -- TODO: Could we use 33 bytes?
+    pub BYTEA NOT NULL CHECK (length(pub) = 33), -- The public key of the miner
     nonce BIGINT NOT NULL 
     -- All these can be in the block closing transaction
     -- timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- Block mint timestamp
@@ -50,7 +50,7 @@ CREATE INDEX idx_blockchain_hash ON blockchain(block_hash);
 --     sql_code TEXT NOT NULL, --  CHECK (length(sql_code) <= 100000)
 --     nonce BIGINT NOT NULL,
 --     -- Signature matching the public code of the account
---     sign BYTEA NOT NULL CHECK (length(sign) = 64)
+--     signature BYTEA NOT NULL CHECK (length(signature) = 64)
 --     -- Needed? KISS
 --     -- submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 --     -- estimated_cost NUMERIC(20,8) NOT NULL DEFAULT 0,
@@ -67,7 +67,7 @@ CREATE TABLE block_transactions_template (
     account_id BIGINT NOT NULL,
     sql_code TEXT NOT NULL,
     nonce BIGINT NOT NULL,
-    sign BYTEA NOT NULL CHECK (length(sign) = 64)
+    signature BYTEA NOT NULL CHECK (length(signature) = 64)
     --   Needed?
     -- execution_cost NUMERIC(20,8) NOT NULL,
     -- executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

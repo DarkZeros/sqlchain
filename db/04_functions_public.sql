@@ -10,20 +10,21 @@ CREATE OR REPLACE FUNCTION submit_transaction(
     p_sql_code TEXT,
     p_nonce BIGINT,
     p_signature BYTEA
-) RETURNS INTEGER AS $$
+) RETURNS TEXT AS $$
 DECLARE
     v_acc_pub   BYTEA;    -- public keys should be bytea
     v_acc_nonce BIGINT;
-    v_txid      INTEGER;
     v_input_data BYTEA;
-BEGIN
-    RAISE NOTICE 'Hi!';
+    v_block_id INTEGER;
 
+    v_result    RECORD;
+BEGIN
     -- Account must exist: this SELECT INTO will fail automatically if not found
     SELECT pub, nonce
     INTO v_acc_pub, v_acc_nonce
     FROM ledger
-    WHERE id = p_acc_id;
+    WHERE id = p_acc_id
+    FOR UPDATE;
 
     -----------------------------------------------------------------------
     -- NONCE CHECK: must be greater than stored nonce
@@ -45,9 +46,9 @@ BEGIN
     --         p_acc_id::text || p_sql_code || p_nonce::text,
     --         'sha256'
     --     )::bytea;
-    -- I think concatenating as text is enough
-    v_input_data := p_acc_id::text || p_sql_code || p_nonce::text;
 
+    -- I think concatenating as text is enough to not allow replay attacks or other 
+    v_input_data := p_acc_id::text || p_sql_code || p_nonce::text;
 
     IF NOT ecdsa_verify.ecdsa_verify(
         public_key := v_acc_pub,
@@ -61,14 +62,25 @@ BEGIN
 
     -----------------------------------------------------------------------
     -- Transaction is valid at this point, add it to the current block + ledger
+    -- If the TX fails to execute, then it will fail silently and stay in the chain anyway
     -----------------------------------------------------------------------
-    INSERT INTO pending_transactions (account_id, sql_code, nonce, "sign")
-    VALUES (p_acc_id, p_sql_code, p_nonce, p_signature)
-    RETURNING id INTO v_txid;
+    UPDATE ledger
+    SET nonce = nonce + 1
+    WHERE id = p_acc_id
+    RETURNING nonce INTO v_acc_nonce;
 
-    RETURN v_txid;
+    SELECT COALESCE(MAX(bid), -1) + 1 INTO v_block_id FROM blockchain;
+    EXECUTE format('CREATE TABLE IF NOT EXISTS block_transactions_%s (LIKE block_transactions_template INCLUDING ALL)', v_block_id);
+    EXECUTE format(
+        'INSERT INTO block_transactions_%s (account_id, sql_code, nonce, signature) VALUES ($1, $2, $3, $4)',
+            v_block_id
+        ) USING p_acc_id, p_sql_code, p_nonce, p_signature;
+
+    SELECT execute_transaction(p_acc_id, p_sql_code) INTO v_result;
+
+    RETURN v_result;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- PREPARE MINING BLOCK FUNCTION

@@ -6,8 +6,8 @@
 -- ============================================================================
 -- Built-in function for transferring funds between accounts
 CREATE OR REPLACE FUNCTION transfer_credits(
-    p_to_pub VARCHAR(64),
-    p_amount NUMERIC(20,8)
+    p_to_pub BYTEA,
+    p_amount BIGINT
 ) RETURNS BOOLEAN AS $$
 DECLARE
     v_from_id INTEGER;
@@ -19,8 +19,8 @@ BEGIN
     v_role_name := CURRENT_USER;
     
     -- Extract ID from role name (account_123 -> 123)
-    IF v_role_name LIKE 'account_%' THEN
-        v_from_id := CAST(REPLACE(v_role_name, 'account_', '') AS INTEGER);
+    IF v_role_name LIKE 'role_s%' THEN
+        v_from_id := CAST(REPLACE(v_role_name, 'role_', '') AS INTEGER);
     ELSE
         RAISE EXCEPTION 'Caller is not an account role';
     END IF;
@@ -41,11 +41,6 @@ BEGIN
     IF v_to_id IS NULL THEN
         -- Create new account
         INSERT INTO ledger (pub, credits) VALUES (p_to_pub, 0) RETURNING id INTO v_to_id;
-        
-        -- Create role for new account
-        EXECUTE format('CREATE ROLE account_%s LOGIN PASSWORD NULL', v_to_id);
-        EXECUTE format('GRANT USAGE ON SCHEMA public TO account_%s', v_to_id);
-        EXECUTE format('GRANT EXECUTE ON FUNCTION transfer_credits TO account_%s', v_to_id);
     END IF;
     
     -- Transfer credits
@@ -72,11 +67,11 @@ BEGIN
         -- Drop all objects owned by this account
         EXECUTE format('DROP OWNED BY role_%s CASCADE', v_account.id);
         
-        -- Revoke privileges ? Any?
-        EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM role_%s', v_account.id);
-        EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM role_%s', v_account.id);
-        EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM role_%s', v_account.id);
-        
+        -- Revoke privileges ? Any? not sure if we need it before droping the role entirely
+        -- EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM role_%s', v_account.id);
+        -- EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM role_%s', v_account.id);
+        -- EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM role_%s', v_account.id);
+
         -- Drop the role
         EXECUTE format('DROP ROLE IF EXISTS role_%s', v_account.id);
         
@@ -196,95 +191,64 @@ $$ LANGUAGE plpgsql;
 -- GET MINING INFO FUNCTION
 -- ============================================================================
 -- Get current state for mining (hash without nonce, difficulty, reward)
-CREATE OR REPLACE FUNCTION get_mining_info() 
-RETURNS TABLE(
-    current_block INTEGER,
-    base_hash VARCHAR(64),
-    difficulty INTEGER,
-    reward NUMERIC(20,8),
-    server_fee_percent NUMERIC(20,8),
-    pending_tx_count BIGINT
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        CAST((SELECT value FROM system_config WHERE key = 'current_block') AS INTEGER) + 1,
-        calculate_block_hash(CAST((SELECT value FROM system_config WHERE key = 'current_block') AS INTEGER) + 1, 0),
-        CAST((SELECT value FROM system_config WHERE key = 'difficulty_zeros') AS INTEGER),
-        CAST((SELECT value FROM system_config WHERE key = 'mining_reward') AS NUMERIC),
-        CAST((SELECT value FROM system_config WHERE key = 'server_fee_percent') AS NUMERIC),
-        COUNT(*) FROM pending_transactions;
-END;
-$$ LANGUAGE plpgsql;
+-- CREATE OR REPLACE FUNCTION get_mining_info() 
+-- RETURNS TABLE(
+--     current_block INTEGER,
+--     base_hash VARCHAR(64),
+--     difficulty INTEGER,
+--     reward NUMERIC(20,8),
+--     server_fee_percent NUMERIC(20,8),
+--     pending_tx_count BIGINT
+-- ) AS $$
+-- BEGIN
+--     RETURN QUERY
+--     SELECT 
+--         CAST((SELECT value FROM system_config WHERE key = 'current_block') AS INTEGER) + 1,
+--         calculate_block_hash(CAST((SELECT value FROM system_config WHERE key = 'current_block') AS INTEGER) + 1, 0),
+--         CAST((SELECT value FROM system_config WHERE key = 'difficulty_zeros') AS INTEGER),
+--         CAST((SELECT value FROM system_config WHERE key = 'mining_reward') AS NUMERIC),
+--         CAST((SELECT value FROM system_config WHERE key = 'server_fee_percent') AS NUMERIC),
+--         COUNT(*) FROM pending_transactions;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- EXECUTE PENDING TRANSACTION FUNCTION
 -- ============================================================================
--- Execute a single pending transaction in the context of its owner
+-- Execute a single transaction in the context of its owner, elevating the 
 CREATE OR REPLACE FUNCTION execute_transaction(
-    p_txid INTEGER,
-    p_block_id INTEGER
-) RETURNS BOOLEAN AS $$
+    p_acc_id BIGINT,
+    p_sql_code TEXT
+) RETURNS RECORD AS $$
 DECLARE
     v_tx RECORD;
     v_base_cost NUMERIC(20,8);
     v_execution_cost NUMERIC(20,8);
-    v_error TEXT;
-BEGIN
-    -- Get transaction details
-    SELECT * INTO v_tx FROM pending_transactions WHERE txid = p_txid;
+    v_result RECORD;
+BEGIN  
+    -- Get base transaction cost (SIZE + EXECUTION)
+    -- SELECT CAST(value AS NUMERIC) INTO v_base_cost 
+    -- FROM system_config WHERE key = 'transaction_base_cost';
     
-    IF NOT FOUND THEN
-        RETURN FALSE;
-    END IF;
-    
-    -- Get base transaction cost
-    SELECT CAST(value AS NUMERIC) INTO v_base_cost 
-    FROM system_config WHERE key = 'transaction_base_cost';
-    
-    v_execution_cost := v_base_cost;
+    -- v_execution_cost := v_base_cost;
+    v_execution_cost := 10; -- TODO
     
     -- Check if account has enough credits
-    IF (SELECT credits FROM ledger WHERE id = v_tx.account_id) < v_execution_cost THEN
-        -- Record failed transaction
-        EXECUTE format(
-            'INSERT INTO block_transactions_%s (account_id, pub, sql_code, signature, execution_cost, success, error_message) VALUES ($1, $2, $3, $4, $5, FALSE, $6)',
-            p_block_id
-        ) USING v_tx.account_id, v_tx.pub, v_tx.sql_code, v_tx.signature, v_execution_cost, 'Insufficient credits for transaction cost';
-        
-        DELETE FROM pending_transactions WHERE txid = p_txid;
-        RETURN FALSE;
+    IF (SELECT credits FROM ledger WHERE id = p_acc_id) < v_execution_cost THEN
+        -- Remove all credits from account
+        UPDATE ledger SET credits = 0 WHERE id = p_acc_id;
+        RETURN "no credits";
     END IF;
     
     -- Deduct transaction cost
-    UPDATE ledger SET credits = credits - v_execution_cost WHERE id = v_tx.account_id;
+    UPDATE ledger SET credits = credits - v_execution_cost WHERE id = p_acc_id;
     
     -- Execute SQL as the account role
     BEGIN
-        EXECUTE format('SET ROLE account_%s', v_tx.account_id);
-        EXECUTE v_tx.sql_code;
-        EXECUTE 'RESET ROLE';
-        
-        -- Record successful transaction
-        EXECUTE format(
-            'INSERT INTO block_transactions_%s (account_id, pub, sql_code, signature, execution_cost, success) VALUES ($1, $2, $3, $4, $5, TRUE)',
-            p_block_id
-        ) USING v_tx.account_id, v_tx.pub, v_tx.sql_code, v_tx.signature, v_execution_cost;
-        
-    EXCEPTION WHEN OTHERS THEN
-        EXECUTE 'RESET ROLE';
-        GET STACKED DIAGNOSTICS v_error = MESSAGE_TEXT;
-        
-        -- Record failed transaction
-        EXECUTE format(
-            'INSERT INTO block_transactions_%s (account_id, pub, sql_code, signature, execution_cost, success, error_message) VALUES ($1, $2, $3, $4, $5, FALSE, $6)',
-            p_block_id
-        ) USING v_tx.account_id, v_tx.pub, v_tx.sql_code, v_tx.signature, v_execution_cost, v_error;
+        EXECUTE format('SET LOCAL ROLE role_%s', p_acc_id);
+        SELECT p_sql_code INTO v_result;
     END;
-    
-    -- Remove from pending queue
-    DELETE FROM pending_transactions WHERE txid = p_txid;
-    
-    RETURN TRUE;
+
+    return v_result;
 END;
 $$ LANGUAGE plpgsql;

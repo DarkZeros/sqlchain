@@ -1,6 +1,5 @@
 INSERT INTO ledger (pub, credits)
 VALUES (                  
-    -- '\x7beb1d74de217448a6e66425b9167831b0a9d939191bc1a77825071bd0eb073f22ae7a61eddd453cde7aa5709e7ee0b1adecf80c953889afb0defebbd620d663'::bytea,
     '\x037beb1d74de217448a6e66425b9167831b0a9d939191bc1a77825071bd0eb073f'::bytea,
     10000
 );
