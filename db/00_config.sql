@@ -2,6 +2,7 @@
 -- This file creates the config defaults
 
 CREATE EXTENSION pg_ecdsa_verify;
+CREATE EXTENSION plpython3u;
 
 -- ============================================================================
 -- SYSTEM CONFIGURATION TABLE

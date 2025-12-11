@@ -121,7 +121,8 @@ class SQLChainManager:
             str(self.postgres_src / "configure"),
             f"--prefix={self.build_dir}",
             "--without-readline",
-            "--without-zlib"
+            "--without-zlib",
+            "--with-python" # for the python extension, not really needed but just for easy testing
         ]
         self.run_command(configure_cmd, cwd=self.build_dir)
         
