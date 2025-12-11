@@ -219,7 +219,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION execute_transaction(
     p_acc_id BIGINT,
     p_sql_code TEXT
-) RETURNS RECORD AS $$
+) RETURNS SETOF RECORD AS $$
 DECLARE
     v_tx RECORD;
     v_base_cost NUMERIC(20,8);
@@ -237,7 +237,7 @@ BEGIN
     IF (SELECT credits FROM ledger WHERE id = p_acc_id) < v_execution_cost THEN
         -- Remove all credits from account
         UPDATE ledger SET credits = 0 WHERE id = p_acc_id;
-        RETURN "no credits";
+        RETURN; -- "no credits";
     END IF;
     
     -- Deduct transaction cost
@@ -246,9 +246,14 @@ BEGIN
     -- Execute SQL as the account role
     BEGIN
         EXECUTE format('SET LOCAL ROLE role_%s', p_acc_id);
-        SELECT p_sql_code INTO v_result;
+        -- EXECUTE p_sql_code;
+        FOR v_result IN EXECUTE p_sql_code
+        LOOP
+            -- RAISE NOTICE 'Number: %', rec.num;
+            RETURN NEXT v_result;
+        END LOOP;
     END;
 
-    return v_result;
+    --return v_result;
 END;
 $$ LANGUAGE plpgsql;
