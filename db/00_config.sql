@@ -3,6 +3,7 @@
 
 CREATE EXTENSION pg_ecdsa_verify;
 CREATE EXTENSION plpython3u;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================================================
 -- SYSTEM CONFIGURATION TABLE

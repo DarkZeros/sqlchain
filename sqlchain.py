@@ -77,7 +77,7 @@ class SQLChainManager:
             return False
         
         # Construct relative path to pg_config from extension directory
-        pg_config_path = Path("..") / BUILD_DIR / "bin" / "pg_config"
+        pg_config_path = (self.project_root / self.build_dir / "bin" / "pg_config").resolve()
         
         # Initialize pgrx with our custom PostgreSQL build
         self.log("Initializing pgrx with custom PostgreSQL build...")
@@ -121,8 +121,9 @@ class SQLChainManager:
             str(self.postgres_src / "configure"),
             f"--prefix={self.build_dir}",
             "--without-readline",
-            "--without-zlib",
-            "--with-python" # for the python extension, not really needed but just for easy testing
+            "--with-zlib",
+            "--with-openssl",
+            "--with-python", # for the python extension, not really needed but just for easy testing
         ]
         self.run_command(configure_cmd, cwd=self.build_dir)
         
@@ -136,9 +137,21 @@ class SQLChainManager:
         
         self.log("PostgreSQL built successfully!", "SUCCESS")
         
+        # Build and install pgcrypto extension
+        self.log("Building pgcrypto extension...")
+        pgcrypto_dir = self.postgres_src / "contrib" / "pgcrypto"
+        try:
+            self.run_command(["make"], cwd=pgcrypto_dir)
+            self.run_command(["make", "install"], cwd=pgcrypto_dir)
+            self.log("pgcrypto extension installed successfully!", "SUCCESS")
+        except subprocess.CalledProcessError:
+            self.log("pgcrypto installation failed", "WARN")
+            return False
+        
         # Build and install PostgreSQL extension
         if not self.build_pg_extension():
             self.log("Extension build failed, but PostgreSQL is ready", "WARN")
+            return False
         
         return True
     
